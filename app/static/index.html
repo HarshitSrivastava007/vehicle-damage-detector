@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Vehicle Damage Detector — Test UI</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #262b36;
+    --text: #e6e8ec;
+    --muted: #9aa2b1;
+    --accent: #4f8cff;
+    --danger: #ff5c5c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 32px 16px;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  p.subtitle { color: var(--muted); margin-top: 0; margin-bottom: 24px; font-size: 0.9rem; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+  }
+  .dropzone.dragover { border-color: var(--accent); }
+  .dropzone input { display: none; }
+  .dropzone .hint { color: var(--muted); font-size: 0.85rem; margin-top: 6px; }
+
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    margin-top: 16px;
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .status { margin-top: 12px; font-size: 0.9rem; color: var(--muted); }
+  .status.error { color: var(--danger); }
+
+  .results {
+    display: none;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  .results.visible { display: grid; }
+  @media (max-width: 700px) {
+    .results.visible { grid-template-columns: 1fr; }
+  }
+
+  .results img { width: 100%; border-radius: 8px; border: 1px solid var(--border); }
+  .results h3 { font-size: 0.9rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(79, 140, 255, 0.15);
+    color: var(--accent);
+    font-size: 0.8rem;
+  }
+
+  .empty { color: var(--muted); font-size: 0.9rem; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Vehicle Damage Detector</h1>
+    <p class="subtitle">Upload a car photo to test the detection API.</p>
+
+    <div class="panel">
+      <label class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp" />
+        <div id="dropzoneLabel">Click to choose an image, or drag one here</div>
+        <div class="hint">JPEG, PNG, or WEBP</div>
+      </label>
+      <button id="detectBtn" disabled>Run Detection</button>
+      <div class="status" id="status"></div>
+    </div>
+
+    <div class="results" id="results">
+      <div>
+        <h3>Annotated</h3>
+        <img id="annotatedImg" alt="Annotated result" />
+      </div>
+      <div>
+        <h3>Detections</h3>
+        <div id="detectionsTable"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const dropzone = document.getElementById("dropzone");
+    const dropzoneLabel = document.getElementById("dropzoneLabel");
+    const fileInput = document.getElementById("fileInput");
+    const detectBtn = document.getElementById("detectBtn");
+    const statusEl = document.getElementById("status");
+    const results = document.getElementById("results");
+    const annotatedImg = document.getElementById("annotatedImg");
+    const detectionsTable = document.getElementById("detectionsTable");
+
+    let selectedFile = null;
+
+    function setFile(file) {
+      if (!file) return;
+      selectedFile = file;
+      dropzoneLabel.textContent = file.name;
+      detectBtn.disabled = false;
+      results.classList.remove("visible");
+      statusEl.textContent = "";
+      statusEl.classList.remove("error");
+    }
+
+    fileInput.addEventListener("change", (e) => setFile(e.target.files[0]));
+
+    dropzone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dropzone.classList.add("dragover");
+    });
+    dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+    dropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropzone.classList.remove("dragover");
+      setFile(e.dataTransfer.files[0]);
+    });
+
+    function setStatus(message, isError) {
+      statusEl.textContent = message;
+      statusEl.classList.toggle("error", Boolean(isError));
+    }
+
+    function renderDetections(detections) {
+      if (!detections.length) {
+        detectionsTable.innerHTML = '<div class="empty">No damage detected.</div>';
+        return;
+      }
+      const rows = detections
+        .map(
+          (d) => `
+            <tr>
+              <td><span class="badge">${d.class_name}</span></td>
+              <td>${(d.confidence * 100).toFixed(1)}%</td>
+              <td>${d.bbox.x1.toFixed(0)}, ${d.bbox.y1.toFixed(0)}, ${d.bbox.x2.toFixed(0)}, ${d.bbox.y2.toFixed(0)}</td>
+            </tr>`
+        )
+        .join("");
+      detectionsTable.innerHTML = `
+        <table>
+          <thead><tr><th>Class</th><th>Confidence</th><th>BBox (x1,y1,x2,y2)</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    }
+
+    async function runDetection() {
+      if (!selectedFile) return;
+      detectBtn.disabled = true;
+      results.classList.remove("visible");
+      setStatus("Running inference…");
+
+      try {
+        const jsonForm = new FormData();
+        jsonForm.append("file", selectedFile);
+        const jsonResp = await fetch("/api/v1/detect", { method: "POST", body: jsonForm });
+        if (!jsonResp.ok) {
+          const body = await jsonResp.json().catch(() => ({}));
+          throw new Error(body.detail || `Request failed (${jsonResp.status})`);
+        }
+        const data = await jsonResp.json();
+
+        const annotateForm = new FormData();
+        annotateForm.append("file", selectedFile);
+        const annotateResp = await fetch("/api/v1/detect?annotate=true", { method: "POST", body: annotateForm });
+        if (!annotateResp.ok) {
+          throw new Error(`Annotated image request failed (${annotateResp.status})`);
+        }
+        const blob = await annotateResp.blob();
+        annotatedImg.src = URL.createObjectURL(blob);
+
+        renderDetections(data.detections);
+        results.classList.add("visible");
+        setStatus(`Found ${data.count} detection(s) in ${data.filename}.`);
+      } catch (err) {
+        setStatus(err.message || "Something went wrong", true);
+      } finally {
+        detectBtn.disabled = false;
+      }
+    }
+
+    detectBtn.addEventListener("click", runDetection);
+  </script>
+</body>
+</html>

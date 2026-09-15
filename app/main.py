@@ -1,9 +1,10 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, UploadFile
 from fastapi.requests import Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from app.config import Settings, get_settings
 from app.inference import annotate_image, build_detection_response
@@ -11,6 +12,8 @@ from app.model_loader import get_model, get_weights_path_used, run_inference
 from app.schemas import DetectionResponse, HealthResponse
 
 logger = logging.getLogger(__name__)
+
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 @asynccontextmanager
@@ -26,6 +29,11 @@ app = FastAPI(title="Vehicle Damage Detection API", version="0.1.0", lifespan=li
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.exception("Unhandled error while processing request")
     return JSONResponse(status_code=500, content={"detail": "internal server error"})
+
+
+@app.get("/", response_class=HTMLResponse)
+async def index() -> HTMLResponse:
+    return HTMLResponse((STATIC_DIR / "index.html").read_text())
 
 
 @app.get("/health", response_model=HealthResponse)
