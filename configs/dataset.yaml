@@ -1,10 +1,11 @@
 # Ultralytics YOLO-seg data config.
-# Verify this class list against the actual Kaggle dataset's category names
-# once downloaded — adjust names/order to match, then re-run training.
+# Verified against issamjebnouni/cardd (official CarDD dataset, real COCO
+# polygon segmentation masks, pre-made train/val/test split).
 
 path: ../data/processed
 train: images/train
 val: images/val
+test: images/test
 
 names:
   0: dent

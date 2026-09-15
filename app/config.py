@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     kaggle_username: str = ""
     kaggle_key: str = ""
 
-    dataset_slug: str = "gabrielfcarvalho/cardd-with-yolo-annotations-images-labels"
+    dataset_slug: str = "issamjebnouni/cardd"
     dataset_raw_dir: Path = Path("data/raw")
     dataset_processed_dir: Path = Path("data/processed")
 

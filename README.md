@@ -35,17 +35,20 @@ KAGGLE_USERNAME=...
 KAGGLE_KEY=...
 ```
 
-**Important:** `DATASET_SLUG` in `.env.example` is a placeholder pointing at
-a CarDD-derived Kaggle dataset. The source dataset has 6 categories (dent,
-scratch, crack, glass_shatter, lamp_broken, tire_flat); this project merges
-`glass_shatter` + `lamp_broken` into a single `broken` class, giving 5 final
-classes: dent, scratch, crack, broken, tire_flat (see
-`training/convert_to_yolo.py`'s `CATEGORY_ALIASES`). The dataset slug itself
-was **not verified** against the original reference notebook
-(`engamohammed/car-damage-instance-segmentation` on Kaggle), which could not
-be fetched during setup. Before downloading,
-open that notebook's "Input" panel on Kaggle and confirm the actual dataset
-slug it uses — update `DATASET_SLUG` in `.env` if it differs.
+`DATASET_SLUG` points at `issamjebnouni/cardd` — the official CarDD
+dataset, verified to ship real COCO polygon segmentation masks (not
+bounding boxes, not RLE) with a pre-made train/val/test split (2816/810/374
+images). It has 6 categories (dent, scratch, crack, glass_shatter,
+lamp_broken, tire_flat); this project merges `glass_shatter` +
+`lamp_broken` into a single `broken` class, giving 5 final classes: dent,
+scratch, crack, broken, tire_flat (see `training/convert_to_yolo.py`'s
+`CATEGORY_ALIASES`).
+
+Note: an earlier candidate dataset (`gabrielfcarvalho/cardd-with-yolo-...`)
+turned out to only have bounding-box labels despite the name — it's not
+usable for segmentation training. `issamjebnouni/cardd` was verified by
+downloading its `train.json`/`val.json`/`test.json` and confirming real
+multi-point polygons in the `segmentation` field before switching to it.
 
 ## 3. Download the dataset
 
@@ -54,16 +57,19 @@ python scripts/download_dataset.py
 ```
 
 This downloads the raw dataset into `data/raw/`, prints a summary of its
-contents, and attempts to convert it into the YOLO-seg layout expected by
-training (`data/processed/images/{train,val}`, `data/processed/labels/{train,val}`).
+contents, and converts it into the YOLO-seg layout expected by training
+(`data/processed/images/{train,val,test}`, `data/processed/labels/{train,val,test}`),
+using the dataset's own `train.json`/`val.json`/`test.json` splits rather
+than inventing a new random split.
 
-The converter (`training/convert_to_yolo.py`) auto-detects whether the raw
-data is already YOLO-shaped or in COCO JSON format. **Inspect `data/raw/`
-after downloading** — if the format doesn't match either case, the script
-will fail with a clear message; extend `convert_to_yolo.py`'s
-`detect_raw_format()`/`convert_coco_to_yolo_seg()` to match what you find
-(e.g. different JSON key names, or RLE-encoded masks requiring
-`pycocotools`).
+If you swap in a different dataset later, the converter (`training/convert_to_yolo.py`)
+auto-detects whether the raw data is already YOLO-shaped or in COCO JSON
+format, and falls back to a random 85/15 split if no named train/val/test
+json files are present. **Inspect `data/raw/`** if the format doesn't match
+either case — the script will fail with a clear message; extend
+`convert_to_yolo.py`'s `detect_raw_format()`/`convert_coco_to_yolo_seg()` to
+match what you find (e.g. different JSON key names, or RLE-encoded masks
+requiring `pycocotools`).
 
 To skip auto-conversion and inspect first:
 
