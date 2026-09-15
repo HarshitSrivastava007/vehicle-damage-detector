@@ -35,9 +35,7 @@ class _FakeResult:
         self.masks = _FakeMasks([[[10, 20], [100, 20], [100, 150], [10, 150]]])
         self.names = CLASS_NAMES
         self.orig_shape = (480, 640)
-
-    def plot(self) -> np.ndarray:
-        return np.zeros((480, 640, 3), dtype=np.uint8)
+        self.orig_img = np.zeros((480, 640, 3), dtype=np.uint8)
 
 
 @pytest.fixture

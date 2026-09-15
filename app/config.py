@@ -36,6 +36,9 @@ class Settings(BaseSettings):
         4: "tire_flat",
     }
 
+    # Single mask/box/label color used for all classes in annotated output.
+    mask_color_rgb: tuple[int, int, int] = (132, 255, 0)  # #84ff00
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property
