@@ -24,7 +24,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--imgsz", type=int, default=640)
     parser.add_argument("--batch", type=int, default=16, help="Use -1 for Ultralytics auto-batch")
     parser.add_argument("--device", default=settings.device, help="e.g. cpu, cuda:0")
-    parser.add_argument("--project", default="runs/segment")
+    # Ultralytics auto-prepends its runs_dir/<task>/ (task="segment" for a
+    # -seg model) to a relative project value, so leave this empty by
+    # default — it resolves to <runs_dir>/segment/<name>. Passing
+    # "runs/segment" here would double up into runs/segment/runs/segment/.
+    parser.add_argument("--project", default="")
     parser.add_argument("--name", default="car_damage_seg")
     parser.add_argument("--patience", type=int, default=50)
     return parser.parse_args()
@@ -47,7 +51,9 @@ def main() -> None:
         patience=args.patience,
     )
 
-    best_weights = Path(args.project) / args.name / "weights" / "best.pt"
+    # Read the actual save_dir Ultralytics used rather than reconstructing it
+    # from args — its project/task path resolution has non-obvious rules.
+    best_weights = model.trainer.save_dir / "weights" / "best.pt"
     settings = get_settings()
     settings.model_weights_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(best_weights, settings.model_weights_path)
