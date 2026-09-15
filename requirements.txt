@@ -12,8 +12,10 @@ fonttools==4.62.1
 fsspec==2026.3.0
 h11==0.16.0
 httptools==0.7.1
+httpx
 idna==3.11
 Jinja2==3.1.6
+kagglehub
 kiwisolver==1.5.0
 MarkupSafe==3.0.3
 matplotlib==3.10.8
@@ -28,7 +30,9 @@ polars-runtime-32==1.39.3
 psutil==7.2.2
 pydantic==2.12.5
 pydantic_core==2.41.5
+pydantic-settings
 pyparsing==3.3.2
+pytest
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 python-multipart==0.0.22

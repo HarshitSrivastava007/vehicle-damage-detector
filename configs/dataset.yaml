@@ -1,0 +1,15 @@
+# Ultralytics YOLO-seg data config.
+# Verify this class list against the actual Kaggle dataset's category names
+# once downloaded — adjust names/order to match, then re-run training.
+
+path: ../data/processed
+train: images/train
+val: images/val
+
+names:
+  0: dent
+  1: scratch
+  2: crack
+  3: glass_shatter
+  4: lamp_broken
+  5: tire_flat
