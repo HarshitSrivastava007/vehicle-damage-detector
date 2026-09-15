@@ -1,8 +1,13 @@
 # Ultralytics YOLO-seg data config.
 # Verified against issamjebnouni/cardd (official CarDD dataset, real COCO
 # polygon segmentation masks, pre-made train/val/test split).
+#
+# `path` is resolved by Ultralytics relative to the current working
+# directory (falling back to its global datasets_dir only if that doesn't
+# exist) — NOT relative to this yaml file's own location. Always run
+# training/train.py from the repo root so this resolves correctly.
 
-path: ../data/processed
+path: data/processed
 train: images/train
 val: images/val
 test: images/test
