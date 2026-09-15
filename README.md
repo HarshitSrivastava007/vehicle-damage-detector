@@ -14,11 +14,17 @@ A fine-tuned model already exists at `models/best.pt` (trained on the
 official CarDD dataset, 100 epochs) — see [Quick Start](#quick-start) to
 just run it.
 
+**Production note:** since a trained model is already included, this repo
+has no Kaggle account details, credentials, or dataset-download code in
+it — that was only ever needed once, to produce `models/best.pt`, and has
+been removed to keep the production app free of unnecessary credentials/
+dependencies. See [Retraining / adding more data](#retraining--adding-more-data)
+if you need to pull fresh data again later.
+
 ## Prerequisites
 
 - Python 3.11+
-- Optional but recommended: a CUDA-capable GPU (training on CPU is very slow)
-- A Kaggle account — only needed if you want to re-download the dataset or retrain
+- Optional but recommended: a CUDA-capable GPU (training on CPU is very slow, only relevant if retraining)
 
 ## Quick Start
 
@@ -42,8 +48,10 @@ to train it yourself.
 
 ## Full Setup From Scratch
 
-Use this if you're setting up on a new machine, want to retrain, or
-`models/best.pt` doesn't exist yet.
+Use this if you're setting up on a new machine and `models/best.pt`
+doesn't exist yet (if you need to retrain with fresh/updated data, see
+[Retraining / adding more data](#retraining--adding-more-data) first to get
+`data/processed/` populated, then come back here).
 
 ### 1. Install dependencies
 
@@ -59,60 +67,16 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Set your Kaggle credentials in `.env` (or place a `kaggle.json` under
-`~/.kaggle/` instead — `kagglehub` picks up either):
-
-```
-KAGGLE_USERNAME=...
-KAGGLE_KEY=...
-```
-
-`DATASET_SLUG` points at `issamjebnouni/cardd` — the official CarDD
-dataset, verified to ship real COCO polygon segmentation masks (not
-bounding boxes, not RLE) with a pre-made train/val/test split
-(2816/810/374 images). It has 6 raw categories (dent, scratch, crack,
-glass_shatter, lamp_broken, tire_flat); this project merges
-`glass_shatter` + `lamp_broken` into a single `broken` class, giving the 5
-final classes above (see `training/convert_to_yolo.py`'s
-`CATEGORY_ALIASES`).
-
-> An earlier candidate dataset (`gabrielfcarvalho/cardd-with-yolo-...`)
-> turned out to only have bounding-box labels despite the name — not
-> usable for segmentation training. Verify any dataset you swap in ships
-> real polygon `segmentation` fields before relying on it.
-
-Also set `DEVICE` in `.env`:
+Set `DEVICE` in `.env` if you plan to train:
 - `DEVICE=cpu` — works everywhere, slow (multiple hours for 100 epochs on ~4000 images)
 - `DEVICE=cuda:0` — requires an NVIDIA GPU + CUDA-enabled torch; ~90 minutes for 100 epochs
 
-### 3. Download the dataset
+### 3. Train the model
 
-```bash
-python scripts/download_dataset.py
-```
-
-Downloads the raw dataset into `data/raw/` (~2.8GB), prints a summary of
-its contents, and converts it into the YOLO-seg layout training expects
-(`data/processed/images/{train,val,test}`,
-`data/processed/labels/{train,val,test}`), using the dataset's own
-train/val/test split rather than inventing a new one.
-
-If you swap in a different dataset later, the converter
-(`training/convert_to_yolo.py`) auto-detects whether the raw data is
-already YOLO-shaped or in COCO JSON format, and falls back to a random
-85/15 split if no named train/val/test json files are present. **Inspect
-`data/raw/`** if the format doesn't match either case — the script fails
-with a clear message; extend `convert_to_yolo.py`'s `detect_raw_format()` /
-`convert_coco_to_yolo_seg()` to match what you find (e.g. different JSON
-key names, or RLE-encoded masks requiring `pycocotools`).
-
-To skip auto-conversion and inspect the raw download first:
-
-```bash
-python scripts/download_dataset.py --skip-convert
-```
-
-### 4. Train the model
+Requires `data/processed/images/{train,val,test}` and
+`data/processed/labels/{train,val,test}` to already be populated in
+YOLO-seg layout — see [Retraining / adding more
+data](#retraining--adding-more-data) if that's not there yet.
 
 ```bash
 python training/train.py --epochs 100 --imgsz 640 --batch 16 --device cuda:0
@@ -152,6 +116,58 @@ the path the API loads from. Training progress/metrics are also written to
 `crack` is the weakest class — subtle/underrepresented in the training
 data. More epochs, more data, or class-balanced sampling would help if you
 retrain.
+
+## Retraining / adding more data
+
+The Kaggle download script (`scripts/download_dataset.py`) and its
+supporting config (`kaggle_username`, `kaggle_key`, `dataset_slug`,
+`dataset_raw_dir`, `dataset_processed_dir` in `app/config.py`) were
+intentionally removed from this repo for production — they were only ever
+a one-time step to produce `models/best.pt`, and there's no reason for a
+deployed app to hold Kaggle credentials or a dataset-download dependency.
+`training/convert_to_yolo.py` (COCO → YOLO-seg conversion) and
+`training/train.py` were kept, since they don't depend on Kaggle at all —
+they just need `data/raw/` (or already-converted `data/processed/`)
+populated by some means.
+
+To pull the original dataset again and retrain from scratch:
+
+1. Recover the original download script from git history (it was last
+   present, unchanged, in commit `e35f4f6`):
+   ```bash
+   mkdir -p scripts
+   git show e35f4f6:scripts/download_dataset.py > scripts/download_dataset.py
+   ```
+2. Reinstall its dependency: `pip install kagglehub` (add `kagglehub` back
+   to `requirements.txt` too if keeping this long-term).
+3. Add these fields back to the `Settings` class in `app/config.py`
+   (they read from `.env`, matching the pattern the other fields use):
+   ```python
+   kaggle_username: str = ""
+   kaggle_key: str = ""
+   dataset_slug: str = "issamjebnouni/cardd"
+   dataset_raw_dir: Path = Path("data/raw")
+   dataset_processed_dir: Path = Path("data/processed")
+   ```
+4. Add matching entries back to `.env` (get a Kaggle API key from Kaggle →
+   Account → "Create New API Token"):
+   ```
+   KAGGLE_USERNAME=...
+   KAGGLE_KEY=...
+   DATASET_SLUG=issamjebnouni/cardd
+   DATASET_RAW_DIR=data/raw
+   DATASET_PROCESSED_DIR=data/processed
+   ```
+5. Run it: `python scripts/download_dataset.py` — see [Full Setup From
+   Scratch](#full-setup-from-scratch) step 3 for what happens next
+   (training).
+
+If you're adding a *different* dataset instead of re-pulling CarDD, you
+don't need Kaggle at all — just get your images/annotations into
+`data/raw/` by any means, then run
+`training/convert_to_yolo.py`'s `convert()` (or write a one-off script)
+to normalize it into `data/processed/`, matching the class list in
+`configs/dataset.yaml`.
 
 ## Running the API
 
@@ -228,8 +244,6 @@ All settings live in `.env` (see `.env.example`), loaded via
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `KAGGLE_USERNAME` / `KAGGLE_KEY` | — | Kaggle API auth for dataset download |
-| `DATASET_SLUG` | `issamjebnouni/cardd` | Kaggle dataset to download |
 | `MODEL_WEIGHTS_PATH` | `models/best.pt` | fine-tuned weights the API loads |
 | `FALLBACK_WEIGHTS_PATH` | `yolov8s-seg.pt` | used if `MODEL_WEIGHTS_PATH` doesn't exist |
 | `CONFIDENCE_THRESHOLD` | `0.25` | minimum detection confidence |
@@ -256,7 +270,6 @@ handling for bad content-type/corrupt images), not detection accuracy.
 app/                  FastAPI service (config, model loading, inference shaping, routes)
 app/static/index.html Browser test UI
 configs/dataset.yaml  Ultralytics data config (class list, train/val/test paths)
-scripts/              Dataset download
 training/             COCO→YOLO conversion, training script
 models/               Trained weights (best.pt) — gitignored
 data/                 Raw + processed dataset — gitignored

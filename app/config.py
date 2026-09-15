@@ -6,13 +6,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    kaggle_username: str = ""
-    kaggle_key: str = ""
-
-    dataset_slug: str = "issamjebnouni/cardd"
-    dataset_raw_dir: Path = Path("data/raw")
-    dataset_processed_dir: Path = Path("data/processed")
-
     model_weights_path: Path = Path("models/best.pt")
     fallback_weights_path: str = "yolov8s-seg.pt"
     confidence_threshold: float = 0.25

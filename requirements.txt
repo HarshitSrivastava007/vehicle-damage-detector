@@ -15,7 +15,6 @@ httptools==0.7.1
 httpx
 idna==3.11
 Jinja2==3.1.6
-kagglehub
 kiwisolver==1.5.0
 MarkupSafe==3.0.3
 matplotlib==3.10.8
