@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,7 +20,13 @@ class Settings(BaseSettings):
     device: str = "cpu"
 
     max_upload_size_mb: int = 10
-    allowed_content_types: list[str] = ["image/jpeg", "image/png", "image/webp"]
+    # Stored as a raw comma-separated string (not list[str]) because
+    # pydantic-settings JSON-decodes complex env values before validators
+    # run, which breaks on a plain comma-separated ALLOWED_CONTENT_TYPES.
+    allowed_content_types_raw: str = Field(
+        default="image/jpeg,image/png,image/webp",
+        validation_alias="ALLOWED_CONTENT_TYPES",
+    )
 
     class_names: dict[int, str] = {
         0: "dent",
@@ -33,12 +39,9 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    @field_validator("allowed_content_types", mode="before")
-    @classmethod
-    def _split_content_types(cls, value: object) -> object:
-        if isinstance(value, str):
-            return [item.strip() for item in value.split(",") if item.strip()]
-        return value
+    @property
+    def allowed_content_types(self) -> list[str]:
+        return [item.strip() for item in self.allowed_content_types_raw.split(",") if item.strip()]
 
 
 @lru_cache
