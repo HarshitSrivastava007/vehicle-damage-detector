@@ -1,9 +1,9 @@
 # Vehicle Damage Detector — Core API
 
-FastAPI service that detects vehicle damage (dent, scratch, crack, glass shatter,
-lamp broken, tire flat) from an uploaded photo using a YOLOv8 instance
-segmentation model, returning class, confidence, bounding box, and mask
-polygon per detection.
+FastAPI service that detects vehicle damage (dent, scratch, crack, broken,
+tire flat) from an uploaded photo using a YOLOv8 instance segmentation
+model, returning class, confidence, bounding box, and mask polygon per
+detection.
 
 **Scope of this pass:** detection API + training pipeline only. No auth,
 billing, database, multi-tenancy, or frontend UI yet (see "Out of scope"
@@ -36,10 +36,14 @@ KAGGLE_KEY=...
 ```
 
 **Important:** `DATASET_SLUG` in `.env.example` is a placeholder pointing at
-a CarDD-derived Kaggle dataset (6 classes: dent, scratch, crack,
-glass_shatter, lamp_broken, tire_flat). It was **not verified** against the
-original reference notebook (`engamohammed/car-damage-instance-segmentation`
-on Kaggle), which could not be fetched during setup. Before downloading,
+a CarDD-derived Kaggle dataset. The source dataset has 6 categories (dent,
+scratch, crack, glass_shatter, lamp_broken, tire_flat); this project merges
+`glass_shatter` + `lamp_broken` into a single `broken` class, giving 5 final
+classes: dent, scratch, crack, broken, tire_flat (see
+`training/convert_to_yolo.py`'s `CATEGORY_ALIASES`). The dataset slug itself
+was **not verified** against the original reference notebook
+(`engamohammed/car-damage-instance-segmentation` on Kaggle), which could not
+be fetched during setup. Before downloading,
 open that notebook's "Input" panel on Kaggle and confirm the actual dataset
 slug it uses — update `DATASET_SLUG` in `.env` if it differs.
 

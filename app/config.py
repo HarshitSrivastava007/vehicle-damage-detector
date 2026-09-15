@@ -32,9 +32,8 @@ class Settings(BaseSettings):
         0: "dent",
         1: "scratch",
         2: "crack",
-        3: "glass_shatter",
-        4: "lamp_broken",
-        5: "tire_flat",
+        3: "broken",
+        4: "tire_flat",
     }
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

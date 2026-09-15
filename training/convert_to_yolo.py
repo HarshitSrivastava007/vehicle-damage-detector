@@ -19,6 +19,18 @@ import shutil
 from pathlib import Path
 from typing import Literal
 
+# Our class list merges the source dataset's separate broken-part categories
+# (e.g. CarDD's "glass_shatter" and "lamp_broken") into one "broken" class.
+# Map any raw category name variant we might encounter to our canonical name.
+CATEGORY_ALIASES = {
+    "glass_shatter": "broken",
+    "glass shatter": "broken",
+    "lamp_broken": "broken",
+    "lamp broken": "broken",
+    "broken_lamp": "broken",
+    "broken_glass": "broken",
+}
+
 
 def detect_raw_format(raw_dir: Path) -> Literal["yolo", "coco", "unknown"]:
     if any(raw_dir.rglob("labels/*.txt")) or list(raw_dir.rglob("*.txt")):
@@ -89,12 +101,14 @@ def convert_coco_to_yolo_seg(
     name_to_id = {name: idx for idx, name in class_name_map.items()}
     category_id_to_class_id = {}
     for category in coco["categories"]:
-        class_id = name_to_id.get(category["name"])
+        raw_name = category["name"]
+        canonical_name = CATEGORY_ALIASES.get(raw_name, raw_name)
+        class_id = name_to_id.get(canonical_name)
         if class_id is None:
             raise NotImplementedError(
-                f"COCO category {category['name']!r} has no match in the configured "
-                "class list (configs/dataset.yaml) — update the class list or add a "
-                "name-mapping step in convert_coco_to_yolo_seg()."
+                f"COCO category {raw_name!r} has no match in the configured class "
+                "list (configs/dataset.yaml) and no entry in CATEGORY_ALIASES — add "
+                "one or update the class list."
             )
         category_id_to_class_id[category["id"]] = class_id
 
