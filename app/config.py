@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     # Single mask/box/label color used for all classes in annotated output.
     mask_color_rgb: tuple[int, int, int] = (132, 255, 0)  # #84ff00
 
+    database_url: str = "sqlite:///./app.db"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property

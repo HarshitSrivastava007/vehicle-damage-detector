@@ -17,3 +17,4 @@ models/*.pt
 runs/
 *.egg-info/
 .pytest_cache/
+*.db

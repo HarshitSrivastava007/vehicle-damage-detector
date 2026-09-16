@@ -96,6 +96,20 @@
     <p class="subtitle">Upload a car photo to test the detection API.</p>
 
     <div class="panel">
+      <label for="apiKeyInput" style="display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 6px;">API Key</label>
+      <div style="display: flex; gap: 8px;">
+        <input
+          type="text"
+          id="apiKeyInput"
+          placeholder="vdd_..."
+          style="flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-family: monospace; font-size: 0.85rem;"
+        />
+        <button id="registerBtn" type="button" style="margin-top: 0; white-space: nowrap;">Get a key</button>
+      </div>
+      <div class="hint" style="margin-top: 6px;">Stored only in this browser's local storage.</div>
+    </div>
+
+    <div class="panel">
       <label class="dropzone" id="dropzone">
         <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp" />
         <div id="dropzoneLabel">Click to choose an image, or drag one here</div>
@@ -126,6 +140,36 @@
     const results = document.getElementById("results");
     const annotatedImg = document.getElementById("annotatedImg");
     const detectionsTable = document.getElementById("detectionsTable");
+    const apiKeyInput = document.getElementById("apiKeyInput");
+    const registerBtn = document.getElementById("registerBtn");
+
+    const API_KEY_STORAGE_KEY = "vdd_api_key";
+
+    apiKeyInput.value = localStorage.getItem(API_KEY_STORAGE_KEY) || "";
+    apiKeyInput.addEventListener("change", () => {
+      localStorage.setItem(API_KEY_STORAGE_KEY, apiKeyInput.value.trim());
+    });
+
+    registerBtn.addEventListener("click", async () => {
+      const email = prompt("Email to register with:");
+      if (!email) return;
+      try {
+        const resp = await fetch("/api/v1/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email }),
+        });
+        const body = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          throw new Error(body.detail || `Registration failed (${resp.status})`);
+        }
+        apiKeyInput.value = body.api_key;
+        localStorage.setItem(API_KEY_STORAGE_KEY, body.api_key);
+        setStatus("Registered — API key saved.");
+      } catch (err) {
+        setStatus(err.message || "Registration failed", true);
+      }
+    });
 
     let selectedFile = null;
 
@@ -181,6 +225,14 @@
 
     async function runDetection() {
       if (!selectedFile) return;
+
+      const apiKey = apiKeyInput.value.trim();
+      if (!apiKey) {
+        setStatus("Enter or register an API key first.", true);
+        return;
+      }
+      const authHeaders = { Authorization: `Bearer ${apiKey}` };
+
       detectBtn.disabled = true;
       results.classList.remove("visible");
       setStatus("Running inference…");
@@ -188,7 +240,7 @@
       try {
         const jsonForm = new FormData();
         jsonForm.append("file", selectedFile);
-        const jsonResp = await fetch("/api/v1/detect", { method: "POST", body: jsonForm });
+        const jsonResp = await fetch("/api/v1/detect", { method: "POST", headers: authHeaders, body: jsonForm });
         if (!jsonResp.ok) {
           const body = await jsonResp.json().catch(() => ({}));
           throw new Error(body.detail || `Request failed (${jsonResp.status})`);
@@ -197,7 +249,7 @@
 
         const annotateForm = new FormData();
         annotateForm.append("file", selectedFile);
-        const annotateResp = await fetch("/api/v1/detect?annotate=true", { method: "POST", body: annotateForm });
+        const annotateResp = await fetch("/api/v1/detect?annotate=true", { method: "POST", headers: authHeaders, body: annotateForm });
         if (!annotateResp.ok) {
           throw new Error(`Annotated image request failed (${annotateResp.status})`);
         }

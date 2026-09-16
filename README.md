@@ -6,9 +6,10 @@ instance segmentation model. For each detection it returns the class,
 confidence score, bounding box, and a mask polygon that traces the actual
 damaged region (not just a box around the whole car).
 
-**Scope of this pass:** detection API + training pipeline + a simple
-browser test UI. No auth, billing, database, multi-tenancy, or production
-frontend yet (see [Out of scope](#out-of-scope) below).
+**Scope of this pass:** detection API + training pipeline + a browser test
+UI + API-key auth and a database (users, keys, detection history). No
+billing, usage limits, multi-tenancy, or production frontend yet (see [Out
+of scope](#out-of-scope) below).
 
 A fine-tuned model already exists at `models/best.pt` (trained on the
 official CarDD dataset, 100 epochs) — see [Quick Start](#quick-start) to
@@ -38,8 +39,9 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-Then open **http://localhost:8000** in a browser for the upload UI, or see
-[Usage](#usage) below for the REST API.
+Then open **http://localhost:8000** in a browser for the upload UI (click
+"Get a key" to register and auto-fill an API key), or see
+[Authentication](#authentication) + [Usage](#usage) below for the REST API.
 
 If `models/best.pt` doesn't exist, the API still starts and runs — it falls
 back to the base COCO-pretrained `yolov8s-seg.pt`, which won't recognize
@@ -178,13 +180,51 @@ uvicorn app.main:app --reload --port 8000
 `GET /health` reports whether `models/best.pt` was found and loaded (vs.
 the fallback pretrained weights).
 
+## Authentication
+
+`POST /api/v1/detect` and `GET /api/v1/detections` require an API key.
+`GET /`, `GET /health`, and the `/api/v1/auth/*` endpoints do not.
+
+Get a key by registering (no login/password — just an email, for now):
+
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "you@example.com"}'
+# {"user_id":1,"email":"you@example.com","api_key":"vdd_...«shown once»..."}
+```
+
+Save the `api_key` — it's only ever shown at creation time (only its hash
+is stored). Pass it on every authenticated request:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/detect \
+  -H "Authorization: Bearer vdd_..." \
+  -F "file=@/path/to/car.jpg"
+```
+
+Account/key management:
+
+| Method & Path | Auth | Purpose |
+|---|---|---|
+| `POST /api/v1/auth/register` | none | Create a user + first API key |
+| `GET /api/v1/auth/me` | required | Current user's id/email |
+| `POST /api/v1/auth/keys` | required | Issue an additional key |
+| `GET /api/v1/auth/keys` | required | List your keys (never shows the raw key, only a display prefix) |
+| `DELETE /api/v1/auth/keys/{id}` | required | Revoke a key (`404` if not yours, `409` if already revoked) |
+
+There's no password reset, email verification, or admin panel yet — this
+is intentionally a minimal foundation (see [Out of scope](#out-of-scope)).
+
 ## Usage
 
 ### Browser UI
 
-Open **http://localhost:8000** — upload or drag-and-drop a photo, click
-"Run Detection", and it shows the annotated image next to a table of
-detected classes, confidence, and bounding boxes.
+Open **http://localhost:8000** — enter an API key or click "Get a key" to
+register one on the spot, then upload or drag-and-drop a photo and click
+"Run Detection". Shows the annotated image next to a table of detected
+classes, confidence, and bounding boxes. The key is stored in the
+browser's `localStorage` only.
 
 ### REST API
 
@@ -195,12 +235,13 @@ curl http://localhost:8000/health
 # {"status":"ok","model_loaded":true,"weights_path":"models/best.pt"}
 ```
 
-**`POST /api/v1/detect`** — multipart file upload (`file` field), JPEG/PNG/WEBP.
+**`POST /api/v1/detect`** — multipart file upload (`file` field), JPEG/PNG/WEBP. Requires `Authorization: Bearer <api_key>` (see [Authentication](#authentication)).
 
 JSON response (default):
 
 ```bash
 curl -X POST "http://localhost:8000/api/v1/detect" \
+  -H "Authorization: Bearer vdd_..." \
   -F "file=@/path/to/car.jpg"
 ```
 
@@ -225,6 +266,7 @@ Annotated image instead of JSON — add `?annotate=true`:
 
 ```bash
 curl -X POST "http://localhost:8000/api/v1/detect?annotate=true" \
+  -H "Authorization: Bearer vdd_..." \
   -F "file=@/path/to/car.jpg" \
   --output annotated.png
 ```
@@ -234,8 +276,25 @@ The annotated image draws every detection's mask, box, and class label
 `mask_color_rgb` in `app/config.py` (default `#84ff00` / RGB
 `132, 255, 0`).
 
-Error responses: `415` unsupported file type, `413` file too large
-(`MAX_UPLOAD_SIZE_MB` in `.env`), `422` corrupt/unreadable image.
+Error responses: `401` missing/invalid/revoked API key, `415` unsupported
+file type, `413` file too large (`MAX_UPLOAD_SIZE_MB` in `.env`), `422`
+corrupt/unreadable image.
+
+Every successful call (JSON or annotated) also writes a detection-history
+row, retrievable via:
+
+**`GET /api/v1/detections?limit=20&offset=0`** — your own detection
+history, newest first (`limit` clamped to 1–100).
+
+```bash
+curl "http://localhost:8000/api/v1/detections" -H "Authorization: Bearer vdd_..."
+```
+
+```json
+[
+  {"id": 1, "filename": "car.jpg", "detection_count": 1, "class_counts": {"scratch": 1}, "created_at": "2026-09-16T15:13:12"}
+]
+```
 
 ## Configuration reference
 
@@ -251,6 +310,7 @@ All settings live in `.env` (see `.env.example`), loaded via
 | `DEVICE` | `cpu` | inference/training device |
 | `MAX_UPLOAD_SIZE_MB` | `10` | upload size limit |
 | `ALLOWED_CONTENT_TYPES` | `image/jpeg,image/png,image/webp` | comma-separated allowed MIME types |
+| `DATABASE_URL` | `sqlite:///./app.db` | users/API keys/detection history storage; swap to `postgresql+psycopg2://...` (+ `pip install psycopg2-binary`) for Postgres, no code change needed |
 
 ## Development
 
@@ -260,27 +320,32 @@ All settings live in `.env` (see `.env.example`), loaded via
 pytest
 ```
 
-Tests mock the model layer, so they run without network access, a GPU, or
-trained weights. They validate the API contract (response shape, error
-handling for bad content-type/corrupt images), not detection accuracy.
+Tests mock the model layer and use an isolated in-memory SQLite database
+per test (via monkeypatching `app.db.engine`/`SessionLocal`), so they run
+without network access, a GPU, trained weights, or touching the real
+`app.db` file. They validate the API contract (response shape, auth
+enforcement, error handling), not detection accuracy.
 
 ### Project structure
 
 ```
-app/                  FastAPI service (config, model loading, inference shaping, routes)
-app/static/index.html Browser test UI
-configs/dataset.yaml  Ultralytics data config (class list, train/val/test paths)
-training/             COCO→YOLO conversion, training script
-models/               Trained weights (best.pt) — gitignored
-data/                 Raw + processed dataset — gitignored
-tests/                pytest suite with a mocked model
+app/                    FastAPI service (config, model loading, inference shaping, routes)
+app/db.py               SQLAlchemy engine/session setup
+app/db_models.py        User, APIKey, DetectionLog ORM models
+app/auth.py             API key generation/hashing + auth dependency
+app/routers/auth.py     Register/list-keys/create-key/revoke-key endpoints
+app/static/index.html   Browser test UI
+configs/dataset.yaml    Ultralytics data config (class list, train/val/test paths)
+training/               COCO→YOLO conversion, training script
+models/                 Trained weights (best.pt) — gitignored
+data/                   Raw + processed dataset — gitignored
+tests/                  pytest suite with a mocked model + isolated in-memory DB
 ```
 
 ## Out of scope
 
-- Authentication / API keys
 - Per-user usage limits / billing (Stripe, etc.)
-- Database / persistence layer
+- Password reset, email verification, admin panel
 - Production web frontend / dashboard (the current UI is a test tool only)
 - Docker / deployment configuration
-- Multi-tenancy
+- Multi-tenancy beyond basic per-user data isolation (already in place: every user only sees their own keys/detection history)

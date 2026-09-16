@@ -4,6 +4,9 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 CLASS_NAMES = {
     0: "dent",
@@ -48,8 +51,22 @@ def sample_image_bytes() -> bytes:
 
 @pytest.fixture
 def client(monkeypatch) -> TestClient:
+    import app.db as db_module
     import app.main as main_module
     from app.model_loader import _decode_image
+
+    # Isolated in-memory DB per test. StaticPool keeps one shared connection
+    # so the in-memory database persists across the multiple SessionLocal()
+    # instances created during a single test (otherwise each connection
+    # would see its own empty in-memory DB).
+    test_engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestSessionLocal = sessionmaker(bind=test_engine, autoflush=False, autocommit=False)
+    monkeypatch.setattr(db_module, "engine", test_engine)
+    monkeypatch.setattr(db_module, "SessionLocal", TestSessionLocal)
 
     def fake_run_inference(image, conf=None, iou=None):
         _decode_image(image)
@@ -61,3 +78,10 @@ def client(monkeypatch) -> TestClient:
 
     with TestClient(main_module.app) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def auth_headers(client: TestClient) -> dict[str, str]:
+    response = client.post("/api/v1/auth/register", json={"email": "tester@example.com"})
+    assert response.status_code == 201
+    return {"Authorization": f"Bearer {response.json()['api_key']}"}
