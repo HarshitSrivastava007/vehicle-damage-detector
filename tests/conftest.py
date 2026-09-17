@@ -85,3 +85,41 @@ def auth_headers(client: TestClient) -> dict[str, str]:
     response = client.post("/api/v1/auth/register", json={"email": "tester@example.com"})
     assert response.status_code == 201
     return {"Authorization": f"Bearer {response.json()['api_key']}"}
+
+
+@pytest.fixture
+def db_session(client: TestClient):
+    # `client` has already monkeypatched app.db.SessionLocal to the
+    # per-test in-memory engine — this exposes a raw Session on that same
+    # engine for direct row assertions/mutations in tests.
+    import app.db as db_module
+
+    session = db_module.SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+@pytest.fixture
+def session_user(client: TestClient) -> TestClient:
+    client.post(
+        "/api/v1/auth/register",
+        json={"email": "dash@example.com", "password": "correct horse battery staple"},
+    )
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"email": "dash@example.com", "password": "correct horse battery staple"},
+    )
+    assert response.status_code == 200
+    return client  # cookie now persists on this client for subsequent requests
+
+
+@pytest.fixture
+def admin_session_user(session_user: TestClient, db_session) -> TestClient:
+    from app.db_models import User
+
+    user = db_session.query(User).filter_by(email="dash@example.com").one()
+    user.is_admin = True
+    db_session.commit()
+    return session_user

@@ -34,6 +34,26 @@ def display_prefix(raw_key: str) -> str:
     return raw_key[: len(API_KEY_PREFIX) + 8]
 
 
+def resolve_api_key(raw_key: str | None, db: Session) -> APIKey | None:
+    """Look up and validate a raw API key. Returns None (never raises) so
+    callers that want to try a different auth mechanism afterwards can."""
+    if not raw_key:
+        return None
+
+    key_hash = hash_api_key(raw_key)
+    api_key = db.scalars(select(APIKey).where(APIKey.key_hash == key_hash)).one_or_none()
+    if api_key is None or api_key.revoked_at is not None:
+        return None
+    # Checked on every request (not just login) so deactivating a user
+    # immediately blocks all their existing keys, not just future ones.
+    if not api_key.user.is_active:
+        return None
+
+    api_key.last_used_at = datetime.now(timezone.utc)
+    db.commit()
+    return api_key
+
+
 def get_current_api_key(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
     db: Session = Depends(get_db),
@@ -45,17 +65,13 @@ def get_current_api_key(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    key_hash = hash_api_key(credentials.credentials)
-    api_key = db.scalars(select(APIKey).where(APIKey.key_hash == key_hash)).one_or_none()
-    if api_key is None or api_key.revoked_at is not None:
+    api_key = resolve_api_key(credentials.credentials, db)
+    if api_key is None:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             "invalid or revoked API key",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-    api_key.last_used_at = datetime.now(timezone.utc)
-    db.commit()
     return api_key
 
 

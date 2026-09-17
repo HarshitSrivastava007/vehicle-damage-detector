@@ -34,6 +34,10 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./app.db"
 
+    # Gates the session cookie's `secure` flag: off in dev (plain HTTP),
+    # on in production (HTTPS only). Set ENVIRONMENT=production to deploy.
+    environment: str = "development"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property

@@ -18,3 +18,6 @@ runs/
 *.egg-info/
 .pytest_cache/
 *.db
+
+frontend/node_modules/
+frontend/dist/

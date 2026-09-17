@@ -238,23 +238,19 @@
       setStatus("Running inference…");
 
       try {
-        const jsonForm = new FormData();
-        jsonForm.append("file", selectedFile);
-        const jsonResp = await fetch("/api/v1/detect", { method: "POST", headers: authHeaders, body: jsonForm });
-        if (!jsonResp.ok) {
-          const body = await jsonResp.json().catch(() => ({}));
-          throw new Error(body.detail || `Request failed (${jsonResp.status})`);
+        // Single request: ?include_annotated=true returns detections AND
+        // the annotated image (base64) together. Two separate calls (JSON
+        // + ?annotate=true) would each write a DetectionLog row, doubling
+        // the recorded count for what's really one "run detection" click.
+        const form = new FormData();
+        form.append("file", selectedFile);
+        const resp = await fetch("/api/v1/detect?include_annotated=true", { method: "POST", headers: authHeaders, body: form });
+        if (!resp.ok) {
+          const body = await resp.json().catch(() => ({}));
+          throw new Error(body.detail || `Request failed (${resp.status})`);
         }
-        const data = await jsonResp.json();
-
-        const annotateForm = new FormData();
-        annotateForm.append("file", selectedFile);
-        const annotateResp = await fetch("/api/v1/detect?annotate=true", { method: "POST", headers: authHeaders, body: annotateForm });
-        if (!annotateResp.ok) {
-          throw new Error(`Annotated image request failed (${annotateResp.status})`);
-        }
-        const blob = await annotateResp.blob();
-        annotatedImg.src = URL.createObjectURL(blob);
+        const data = await resp.json();
+        annotatedImg.src = `data:image/png;base64,${data.annotated_image_base64}`;
 
         renderDetections(data.detections);
         results.classList.add("visible");

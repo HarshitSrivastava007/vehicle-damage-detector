@@ -1,6 +1,7 @@
 from datetime import datetime
+from decimal import Decimal
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class BBox(BaseModel):
@@ -23,6 +24,11 @@ class DetectionResponse(BaseModel):
     image_height: int
     count: int
     detections: list[Detection]
+    # Populated only when ?include_annotated=true — a base64-encoded PNG,
+    # so a caller can get detections + the annotated image in one request
+    # instead of two (two calls to /detect would log two DetectionLog rows
+    # for what a user experiences as a single "run detection" action).
+    annotated_image_base64: str | None = None
 
 
 class HealthResponse(BaseModel):
@@ -33,6 +39,7 @@ class HealthResponse(BaseModel):
 
 class RegisterRequest(BaseModel):
     email: EmailStr
+    password: str | None = None
 
 
 class RegisterResponse(BaseModel):
@@ -72,4 +79,51 @@ class DetectionLogOut(BaseModel):
     filename: str
     detection_count: int
     class_counts: dict[str, int]
+    cost: Decimal
     created_at: datetime
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class SessionUserOut(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: int
+    email: EmailStr
+    is_admin: bool
+    is_active: bool
+    cost_per_call: Decimal
+    created_at: datetime
+
+
+class AdminUserOut(SessionUserOut):
+    total_detections: int
+
+
+class UpdateCostRequest(BaseModel):
+    cost_per_call: Decimal = Field(ge=0)
+
+
+class AdminCreateUserRequest(BaseModel):
+    email: EmailStr
+    password: str
+    is_admin: bool = False
+    cost_per_call: Decimal = Field(default=Decimal("0"), ge=0)
+
+
+class AdminCreateUserResponse(AdminUserOut):
+    api_key: str
+
+
+class UpdateUserStatusRequest(BaseModel):
+    is_active: bool
+
+
+class UsageSummaryOut(BaseModel):
+    calls_this_month: int
+    cost_this_month: Decimal
+    calls_all_time: int
+    cost_all_time: Decimal

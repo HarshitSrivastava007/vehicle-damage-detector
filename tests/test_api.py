@@ -1,5 +1,5 @@
-def test_index_serves_html(client):
-    response = client.get("/")
+def test_legacy_test_ui_serves_html(client):
+    response = client.get("/internal/legacy-test-ui")
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
     assert "Vehicle Damage Detector" in response.text
@@ -86,3 +86,32 @@ def test_detection_history_records_after_detect(client, sample_image_bytes, auth
     assert len(entries) == 1
     assert entries[0]["filename"] == "test.jpg"
     assert entries[0]["detection_count"] == detect_response.json()["count"]
+
+
+def test_detect_include_annotated_returns_embedded_image_in_one_call(client, sample_image_bytes, auth_headers):
+    response = client.post(
+        "/api/v1/detect?include_annotated=true",
+        headers=auth_headers,
+        files={"file": ("test.jpg", sample_image_bytes, "image/jpeg")},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["annotated_image_base64"]
+    assert isinstance(body["detections"], list)
+
+    # A single ?include_annotated=true call must log exactly one
+    # DetectionLog row — regression guard for a bug where the dashboard's
+    # "run detection" made two separate /detect calls (JSON + ?annotate=true)
+    # and doubled every count in history.
+    history = client.get("/api/v1/detections", headers=auth_headers).json()
+    assert len(history) == 1
+
+
+def test_detect_annotate_true_does_not_include_json_body(client, sample_image_bytes, auth_headers):
+    response = client.post(
+        "/api/v1/detect?annotate=true",
+        headers=auth_headers,
+        files={"file": ("test.jpg", sample_image_bytes, "image/jpeg")},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
