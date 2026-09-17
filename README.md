@@ -224,6 +224,54 @@ catch-all fallback so client-side routes (`/keys`, `/detect`, `/admin`,
 etc.) resolve correctly on a hard refresh. Rebuild (`npm run build`)
 after any frontend change — `app/main.py` doesn't rebuild it for you.
 
+## Docker
+
+A multi-stage `Dockerfile` builds the SPA (Node) and the API (Python) into
+a single image — this is the "production-like" mode above, containerized.
+
+```bash
+cp .env.example .env   # first time only
+docker compose up --build
+```
+
+Then open **http://localhost:8000**. What this actually does:
+
+- **Stage 1** (`node:20-slim`): `npm ci && npm run build` for `frontend/`.
+- **Stage 2** (`python:3.12-slim`): installs `requirements.txt`, copies
+  `app/`, `configs/`, `training/`, `scripts/`, `models/` (including
+  `models/best.pt` if it exists on your machine — the image is only as
+  good as whatever's already trained locally when you build it), and the
+  built SPA from stage 1. Runs as a non-root user. `HEALTHCHECK` hits
+  `GET /health`.
+- `docker-compose.yml` mounts a named volume (`app-data`) at
+  `/app/instance` and points `DATABASE_URL` at a sqlite file inside it, so
+  users/keys/detection history persist across `docker compose down`/`up`
+  (a named volume avoids the common footgun of bind-mounting a single
+  sqlite file that doesn't exist yet on the host, which makes Docker
+  create a directory there instead of a file). It also sets
+  `ENVIRONMENT=production` (session cookie gets `Secure`), overriding
+  `.env`'s dev-oriented defaults for just those two variables — everything
+  else (model paths, thresholds, upload limits) still comes from `.env`.
+
+Bootstrap the first admin the same way as a non-Docker install:
+```bash
+docker compose exec app python scripts/promote_admin.py you@example.com
+```
+
+**Known limitations of this pass** (see also [Out of
+scope](#out-of-scope)): single container only, no reverse proxy/TLS
+termination, no Postgres service included (swap `DATABASE_URL` to a
+`postgresql+psycopg2://...` value and add a `postgres` service +
+`psycopg2-binary` yourself if you need it — see
+[Configuration reference](#configuration-reference)), CPU-only (no CUDA
+base image/GPU passthrough — fine for inference, which is already fast
+enough on CPU per the smoke-testing in this repo; only training benefits
+meaningfully from a GPU, and training isn't expected to run inside this
+container). If `models/best.pt` wasn't present at build time, the
+container falls back to downloading the base COCO-pretrained
+`yolov8s-seg.pt` on first request, same as running locally — which
+requires the container to have network access.
+
 ## Authentication
 
 Two independent mechanisms, both accepted by `POST /api/v1/detect`,
@@ -497,5 +545,7 @@ tests/                   pytest suite with a mocked model + isolated in-memory D
   stays an API-only flow — see [Authentication](#authentication))
 - Frontend automated tests (backend has full pytest coverage; the SPA is
   a thin display/mutation layer over already-tested endpoints)
-- Docker / deployment configuration
+- Orchestration beyond a single-container `docker-compose.yml` (no
+  Kubernetes/ECS manifests, no managed Postgres/reverse-proxy/TLS setup —
+  see [Docker](#docker))
 - Multi-tenancy beyond basic per-user data isolation (already in place: every user only sees their own keys/detection history)

@@ -1,0 +1,22 @@
+.git/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+tests/
+data/
+runs/
+*.db
+
+.env
+kaggle.json
+
+frontend/node_modules/
+frontend/dist/
+
+# Fallback COCO checkpoint auto-downloaded to repo root during local dev —
+# not needed in the image, downloaded at runtime if models/best.pt is
+# missing.
+yolov8s-seg.pt
+yolo26n.pt

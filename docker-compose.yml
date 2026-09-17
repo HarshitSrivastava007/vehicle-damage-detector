@@ -1,0 +1,23 @@
+services:
+  app:
+    build: .
+    image: veridex-ai:latest
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Override .env's dev-oriented defaults for the container:
+      # - a stable absolute sqlite path inside the mounted volume below
+      #   (bind-mounting a single file that doesn't exist yet on the host
+      #   makes Docker create a directory there instead — a named volume
+      #   avoids that footgun)
+      # - production cookie security (Secure flag on the session cookie)
+      - DATABASE_URL=sqlite:////app/instance/app.db
+      - ENVIRONMENT=production
+    volumes:
+      - app-data:/app/instance
+    restart: unless-stopped
+
+volumes:
+  app-data:
